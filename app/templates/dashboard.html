@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+
+{% block title %}SigNet - Secure Mailbox{% endblock %}
+
+{% block footer %}{% endblock %}
+
+{% block content %}
+<div class="dashboard-layout">
+    <!-- Sidebar navigation -->
+    <aside class="sidebar">
+        <div class="sidebar-profile">
+            <div class="sidebar-avatar">{{ user.username[:2].upper() }}</div>
+            <div class="sidebar-user-info">
+                <h3>{{ user.username }}</h3>
+                <p>{{ user.email }}</p>
+            </div>
+        </div>
+
+        <div class="compose-btn-container">
+            <button class="btn btn-primary compose-btn" onclick="openComposeModal()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Compose New
+            </button>
+        </div>
+
+        <div class="menu-item active" id="menu-inbox" onclick="switchFolder('inbox')">
+            <span>Inbox</span>
+            <span class="menu-badge" id="inbox-badge">{{ inbox_items|length }}</span>
+        </div>
+        <div class="menu-item" id="menu-sent" onclick="switchFolder('sent')">
+            <span>Sent Messages</span>
+            <span class="menu-badge" style="background-color: var(--border);">{{ sent_emails|length }}</span>
+        </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <div class="dashboard-content">
+        <!-- List Panel -->
+        <section class="mailbox-list-panel">
+            <div class="top-bar">
+                <div class="search-container">
+                    <input type="text" class="search-input" id="search-bar" placeholder="Search mail..." onkeyup="filterEmails()">
+                    <span class="search-icon">🔍</span>
+                </div>
+                <div class="filter-section">
+                    <button class="filter-btn active" id="filter-all" onclick="setFilter('all')">All</button>
+                    <button class="filter-btn" id="filter-verified" onclick="setFilter('verified')">Verified</button>
+                    <button class="filter-btn" id="filter-unverified" onclick="setFilter('unverified')">Unverified</button>
+                </div>
+            </div>
+
+            <!-- Inbox Folder List -->
+            <div class="email-list" id="inbox-list">
+                {% if inbox_items %}
+                    {% for item in inbox_items %}
+                        <div class="email-item {% if not item.is_verified %}unverified{% endif %}" 
+                             data-id="{{ item.obj.id }}" 
+                             data-status="{% if item.is_verified %}verified{% else %}unverified{% endif %}"
+                             onclick="loadEmail({{ item.obj.id }}, this)">
+                            <div class="email-item-avatar {% if item.is_verified %}verified{% else %}unverified{% endif %}">
+                                {% if item.is_verified %}
+                                    {{ item.sender_initials }}
+                                {% else %}
+                                    ?
+                                {% endif %}
+                            </div>
+                            <div class="email-item-details">
+                                <div class="email-item-header">
+                                    <span class="email-item-sender">{{ item.obj.sender_email }}</span>
+                                    <span class="email-item-time">{{ item.obj.timestamp.strftime('%b %d') }}</span>
+                                </div>
+                                <div class="email-item-subject">{{ item.obj.subject }}</div>
+                                <div class="email-item-body-preview">{{ item.obj.body[:45] }}{% if item.obj.body|length > 45 %}...{% endif %}</div>
+                                <div class="email-item-badges">
+                                    {% if item.is_verified %}
+                                        <span class="badge badge-verified">✓ Verified</span>
+                                    {% else %}
+                                        <span class="badge badge-unverified">⚠ Unverified</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div style="text-align: center; margin-top: 3rem; color: var(--text-muted);">
+                        No received messages.
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Sent Folder List (Hidden by Default) -->
+            <div class="email-list" id="sent-list" style="display: none;">
+                {% if sent_emails %}
+                    {% for email in sent_emails %}
+                        <div class="email-item" 
+                             data-id="{{ email.id }}" 
+                             data-status="verified"
+                             onclick="loadEmail({{ email.id }}, this)">
+                            <div class="email-item-avatar verified">
+                                {{ email.recipient_email[:2].upper() }}
+                            </div>
+                            <div class="email-item-details">
+                                <div class="email-item-header">
+                                    <span class="email-item-sender">To: {{ email.recipient_email }}</span>
+                                    <span class="email-item-time">{{ email.timestamp.strftime('%b %d') }}</span>
+                                </div>
+                                <div class="email-item-subject">{{ email.subject }}</div>
+                                <div class="email-item-body-preview">{{ email.body[:45] }}{% if email.body|length > 45 %}...{% endif %}</div>
+                                <div class="email-item-badges">
+                                    <span class="badge badge-verified">✓ Signed</span>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div style="text-align: center; margin-top: 3rem; color: var(--text-muted);">
+                        No sent messages.
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+
+        <!-- Preview Panel -->
+        <section class="mailbox-preview-panel">
+            <!-- Placeholder before selecting email -->
+            <div class="preview-placeholder" id="placeholder-panel">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                    <polyline points="22,6 12,13 2,6"></polyline>
+                </svg>
+                <h3>Select an email to view verification details</h3>
+                <p>SigNet dynamically validates cryptography signatures and certificates upon inspection.</p>
+            </div>
+
+            <!-- Email Detail Display (Filled via Ajax) -->
+            <div id="detail-panel" style="display: none; flex-direction: column; height: 100%;">
+                <div class="preview-header">
+                    <h2 class="preview-subject" id="preview-subject"></h2>
+                    <div class="preview-metadata">
+                        <div class="preview-avatar" id="preview-avatar"></div>
+                        <div class="preview-addresses">
+                            <p class="preview-from" id="preview-from"></p>
+                            <p class="preview-to" id="preview-to"></p>
+                        </div>
+                        <div class="preview-time" id="preview-time"></div>
+                    </div>
+                </div>
+
+                <!-- Security Verification Status Banner -->
+                <div class="security-banner" id="security-banner"></div>
+
+                <!-- Message Body -->
+                <div class="preview-body" id="preview-body"></div>
+
+                <!-- Cryptographic Log Breakdown -->
+                <div class="preview-crypto-details">
+                    <h4>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                        Cryptographic Verification Parameters
+                    </h4>
+                    
+                    <div class="crypto-grid">
+                        <div class="crypto-label">Sender Certificate FP:</div>
+                        <div class="crypto-value" id="crypto-fingerprint"></div>
+                        
+                        <div class="crypto-label">Digital Certificate:</div>
+                        <div class="crypto-value">
+                            <pre class="crypto-value-mono" id="crypto-pem"></pre>
+                        </div>
+                        
+                        <div class="crypto-label">Base64 Signature:</div>
+                        <div class="crypto-value" id="crypto-sig" style="word-break: break-all; font-family: monospace;"></div>
+                        
+                        <div class="crypto-label">Verification Payload:</div>
+                        <div class="crypto-value">
+                            <pre class="crypto-value-mono" id="crypto-payload" style="max-height: 100px;"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+<!-- Compose Email Modal Overlay -->
+<div class="modal-overlay" id="compose-modal-overlay">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Compose New Secure Email</h3>
+            <button class="modal-close" onclick="closeComposeModal()">&times;</button>
+        </div>
+        <form action="{{ url_for('compose') }}" method="POST">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="recipient_email">Recipient Email Address</label>
+                    <input type="email" id="recipient_email" name="recipient_email" placeholder="recipient@signet.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="subject">Subject</label>
+                    <input type="text" id="subject" name="subject" placeholder="Project Deliverables" required>
+                </div>
+                <div class="form-group">
+                    <label for="body">Message Body</label>
+                    <textarea id="body" name="body" placeholder="Write your secure signed email content here..." required></textarea>
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 1rem; margin-bottom: 0;">
+                    💡 <em>Upon clicking Send, the system hashes this message (SHA-256) and signs it using your encrypted private key (RSA-2048). Your digital certificate is automatically attached.</em>
+                </p>
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 2rem;">
+                    <button type="button" class="btn" onclick="closeComposeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Sign & Send Email</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    let currentFolder = 'inbox';
+    let currentFilter = 'all';
+
+    function openComposeModal() {
+        document.getElementById('compose-modal-overlay').classList.add('active');
+        document.getElementById('recipient_email').focus();
+    }
+    
+    function closeComposeModal() {
+        document.getElementById('compose-modal-overlay').classList.remove('active');
+        document.getElementById('recipient_email').value = '';
+        document.getElementById('subject').value = '';
+        document.getElementById('body').value = '';
+    }
+
+    // Switch between Inbox and Sent folders
+    function switchFolder(folder) {
+        currentFolder = folder;
+        
+        // Update menu active states
+        document.getElementById('menu-inbox').classList.toggle('active', folder === 'inbox');
+        document.getElementById('menu-sent').classList.toggle('active', folder === 'sent');
+        
+        // Show/hide relevant list panels
+        document.getElementById('inbox-list').style.display = folder === 'inbox' ? 'flex' : 'none';
+        document.getElementById('sent-list').style.display = folder === 'sent' ? 'flex' : 'none';
+        
+        // Reset preview pane
+        document.getElementById('placeholder-panel').style.display = 'flex';
+        document.getElementById('detail-panel').style.display = 'none';
+        
+        // Clear active item selections
+        document.querySelectorAll('.email-item').forEach(item => {
+            item.classList.remove('active', 'unverified-active');
+        });
+        
+        // Show search elements and reapply search filter
+        filterEmails();
+    }
+
+    // Filter email lists by Verified/Unverified cryptographic badges
+    function setFilter(filter) {
+        currentFilter = filter;
+        
+        document.getElementById('filter-all').classList.toggle('active', filter === 'all');
+        document.getElementById('filter-verified').classList.toggle('active', filter === 'verified');
+        document.getElementById('filter-unverified').classList.toggle('active', filter === 'unverified');
+        
+        filterEmails();
+    }
+
+    // Search and badge filter coordination
+    function filterEmails() {
+        const query = document.getElementById('search-bar').value.toLowerCase();
+        const activeListId = currentFolder === 'inbox' ? 'inbox-list' : 'sent-list';
+        const items = document.querySelectorAll(`#${activeListId} .email-item`);
+        
+        items.forEach(item => {
+            const sender = item.querySelector('.email-item-sender').innerText.toLowerCase();
+            const subject = item.querySelector('.email-item-subject').innerText.toLowerCase();
+            const preview = item.querySelector('.email-item-body-preview').innerText.toLowerCase();
+            const status = item.getAttribute('data-status');
+            
+            const matchesSearch = sender.includes(query) || subject.includes(query) || preview.includes(query);
+            const matchesFilter = currentFilter === 'all' || status === currentFilter;
+            
+            if (matchesSearch && matchesFilter) {
+                item.style.display = 'grid';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    // Asynchronously retrieve email metadata and verify payload
+    function loadEmail(emailId, element) {
+        document.querySelectorAll('.email-item').forEach(item => {
+            item.classList.remove('active', 'unverified-active');
+        });
+        
+        const isUnverified = element.classList.contains('unverified');
+        if (isUnverified) {
+            element.classList.add('unverified-active');
+        } else {
+            element.classList.add('active');
+        }
+        
+        fetch(`/email/${emailId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                
+                document.getElementById('placeholder-panel').style.display = 'none';
+                document.getElementById('detail-panel').style.display = 'flex';
+                
+                document.getElementById('preview-subject').innerText = data.subject;
+                document.getElementById('preview-from').innerText = data.sender;
+                document.getElementById('preview-to').innerText = `To: ${data.recipient}`;
+                document.getElementById('preview-time').innerText = data.timestamp;
+                document.getElementById('preview-body').innerText = data.body;
+                
+                const banner = document.getElementById('security-banner');
+                const avatar = document.getElementById('preview-avatar');
+                avatar.innerText = data.sender.substring(0, 2).toUpperCase();
+                
+                if (data.verified) {
+                    banner.className = 'security-banner security-banner-verified';
+                    banner.innerHTML = `
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        ✓ Signature and X.509 Certificate verified successfully
+                    `;
+                    avatar.className = 'preview-avatar verified';
+                } else {
+                    banner.className = 'security-banner security-banner-unverified';
+                    banner.innerHTML = `
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        ⚠ warning: Cryptographic Verification Failed (${data.verification_message})
+                    `;
+                    avatar.className = 'preview-avatar unverified';
+                }
+                
+                document.getElementById('crypto-fingerprint').innerText = data.fingerprint;
+                document.getElementById('crypto-pem').innerText = data.certificate_pem;
+                document.getElementById('crypto-sig').innerText = data.signature;
+                document.getElementById('crypto-payload').innerText = data.payload;
+            })
+            .catch(err => {
+                console.error("Error loading email:", err);
+            });
+    }
+
+    // Modal overlay click closure
+    document.getElementById('compose-modal-overlay').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeComposeModal();
+        }
+    });
+</script>
+{% endblock %}

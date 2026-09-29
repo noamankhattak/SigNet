@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SigNet - Secure Digital Signatures{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header>
+        <a href="/" class="logo-container">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            SigNet
+        </a>
+        <nav class="nav-links">
+            {% if session.get('user_id') %}
+                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.path == '/dashboard' %}active{% endif %}">Mailbox</a>
+                <a href="{{ url_for('profile') }}" class="nav-link {% if request.path == '/profile' %}active{% endif %}">Profile & Keys</a>
+                <a href="{{ url_for('logout') }}" class="nav-link">Logout</a>
+            {% else %}
+                <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">Home</a>
+                <a href="{{ url_for('login') }}" class="nav-link {% if request.path == '/login' %}active{% endif %}">Login</a>
+                <a href="{{ url_for('register') }}" class="nav-link {% if request.path == '/register' %}active{% endif %}">Register</a>
+            {% endif %}
+        </nav>
+    </header>
+
+    <!-- Flash Notifications -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flashes" id="flash-container">
+                {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}">
+                        {% if category == 'success' %}
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        {% elif category == 'danger' %}
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        {% else %}
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="12" x2="12" y2="16"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                        {% endif %}
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <main style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block footer %}
+    <footer>
+        <div class="container" style="margin: 0 auto; padding: 0;">
+            &copy; 2026 SigNet - Secure Digital Signatures & Certificate Authority.
+        </div>
+    </footer>
+    {% endblock %}
+
+    <script>
+        // Auto-hide flash notifications after 5 seconds
+        setTimeout(() => {
+            const container = document.getElementById('flash-container');
+            if (container) {
+                container.style.transition = 'opacity 0.5s ease';
+                container.style.opacity = '0';
+                setTimeout(() => container.remove(), 500);
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
